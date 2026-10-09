@@ -1,0 +1,68 @@
+---
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tooling
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq jq
+          pipx install ansible-core || pip install --quiet ansible-core
+          pipx install ansible-lint || pip install --quiet ansible-lint
+
+      - name: Edge template is valid JSON
+        run: jq -e . edge/config/xray-template.json > /dev/null
+
+      - name: Cross-side consistency (edge <-> exit <-> shared)
+        run: python3 scripts/check-consistency.py
+
+      - name: Render the edge template and validate it with xray-core
+        run: |
+          sed -e 's|"__TR_PORT__"|443|g' \
+              -e 's|"__EDGE_SOCKS_PORT__"|10808|g' \
+              -e 's|"__EDGE_HTTP_PORT__"|10809|g' \
+              -e 's|__TR_IP__|203.0.113.10|g' \
+              -e 's|__TR_UUID__|11111111-2222-3333-4444-555555555555|g' \
+              -e 's|__REALITY_PUBLIC_KEY__|2vOQ8eJ9p1Zr3sTuVwXyZaBcDeFgHiJkLmNoPqRsTuU|g' \
+              -e 's|__REALITY_SHORT_ID__|0123abcd|g' \
+              -e 's|__REALITY_SNI__|www.wikipedia.org|g' \
+              -e 's|__REALITY_FINGERPRINT__|chrome|g' \
+              edge/config/xray-template.json > /tmp/rendered.json
+          jq -e . /tmp/rendered.json > /dev/null
+          docker run --rm -v /tmp/rendered.json:/c.json:ro teddysun/xray xray -test -config /c.json
+
+      - name: Ansible syntax check
+        working-directory: exit
+        run: ansible-playbook playbooks/site.yml --syntax-check
+
+      - name: Ansible lint
+        working-directory: exit
+        run: ansible-lint || true
+
+      - name: Shellcheck
+        run: |
+          sudo apt-get install -y -qq shellcheck
+          shellcheck -S warning edge/scripts/*.sh scripts/*.sh || true
+
+      - name: No plaintext secrets committed
+        run: |
+          set -e
+          if grep -rInE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' \
+               --include='*.json' --include='*.yml' --include='*.j2' \
+               edge exit shared | grep -v 'inbounds.reference.json'; then
+            echo "ERROR: a UUID literal is committed"; exit 1
+          fi
+          if [ -f shared/vault.yml ] && ! head -1 shared/vault.yml | grep -q '^\$ANSIBLE_VAULT'; then
+            echo "ERROR: shared/vault.yml is not encrypted"; exit 1
+          fi
+          echo "no plaintext secrets found"
