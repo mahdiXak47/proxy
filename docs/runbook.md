@@ -3,6 +3,10 @@
 Every procedure assumes you are at the repo root on your workstation, with
 `~/.ansible/vault-pass-proxy` present.
 
+> First-time setup? Use **[`setup-order.md`](setup-order.md)** instead — it is the same work in
+> dependency order with the risk gates called out. This section is the terse version for someone
+> who has done it before.
+
 ## Bootstrap from zero
 
 ```bash

@@ -25,6 +25,7 @@ Internet
 | `shared/vault.yml` | ansible-vault ciphertext: REALITY x25519 keypair + client UUID. Committed encrypted. |
 | `edge/` | x-ui side: compose file, Xray template, apply/verify/backup scripts. |
 | `exit/` | Turkey side: Ansible inventory, playbooks, roles (`base`, `hardening`, `xray`). |
+| `docs/setup-order.md` | **Start here.** Phase-by-phase first-time setup, in order. |
 | `docs/` | Architecture, runbook (rotation/failover/rollback), client setup. |
 | `scripts/check-consistency.py` | CI guard: asserts the edge template and `shared/` agree. |
 
@@ -34,7 +35,19 @@ The REALITY keypair, client UUID, port, SNI and shortId must be **identical on b
 tunnel silently dies. Keeping both sides here means a rotation is one commit, and CI can verify the
 two halves still agree (`make lint`). Split repos make that agreement manual and silently breakable.
 
+## The edge image is custom, and must be
+
+`edge/Dockerfile` builds on top of digest-pinned `alireza7/x-ui:1.10.2` because **upstream ships
+no `sqlite3`**, and `apply-xray-template.sh` / `backup-db.sh` both drive the panel's SQLite
+database through `docker exec x-ui sqlite3`. On the stock image the git-controlled workflow
+cannot function. The image adds `sqlite`, `tzdata`, `curl`, `jq` and `tini` (real PID 1, so
+SIGTERM is forwarded and restarts are clean). Bring it up with `docker compose up -d --build`.
+
 ## Quick start
+
+**First-time setup: follow [`docs/setup-order.md`](docs/setup-order.md)** — it covers the phases
+in dependency order (exit VM before edge, secrets before both) with the lockout warnings in the
+right places. The condensed version:
 
 ```bash
 # 0. one-time: vault password + secrets
