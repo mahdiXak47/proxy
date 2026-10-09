@@ -4,6 +4,10 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
+# Requires sqlite3 inside the container - provided by edge/Dockerfile, NOT by
+# upstream alireza7/x-ui. If this fails with "sqlite3: not found" you are running
+# the upstream image; rebuild with: docker compose up -d --build
+
 CONTAINER="${XUI_CONTAINER:-x-ui}"
 DEST=backups
 RETAIN_DAYS=14

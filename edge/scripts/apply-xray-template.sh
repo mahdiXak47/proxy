@@ -57,11 +57,22 @@ if ! docker exec "$CONTAINER" sqlite3 /etc/x-ui/x-ui.db \
 fi
 
 # 6. Write the template.
+# NOTE: x-ui's schema is `settings(id INTEGER PRIMARY KEY, key TEXT, value TEXT)` with
+# NO unique index on `key`, so `ON CONFLICT(key)` is a parse error ("does not match any
+# PRIMARY KEY or UNIQUE constraint"). DELETE+INSERT inside one IMMEDIATE transaction is
+# the correct upsert here, and it also collapses any duplicate rows a previous tool left.
 docker cp "$OUT" "$CONTAINER":/tmp/tmpl.json
 docker exec "$CONTAINER" sqlite3 /etc/x-ui/x-ui.db \
-  "INSERT INTO settings (key,value) VALUES ('${SETTINGS_KEY}', readfile('/tmp/tmpl.json'))
-   ON CONFLICT(key) DO UPDATE SET value=excluded.value;"
+  "BEGIN IMMEDIATE;
+   DELETE FROM settings WHERE key='${SETTINGS_KEY}';
+   INSERT INTO settings (key,value) VALUES ('${SETTINGS_KEY}', readfile('/tmp/tmpl.json'));
+   COMMIT;"
 docker exec "$CONTAINER" rm -f /tmp/tmpl.json
+
+# Confirm exactly one row landed.
+ROWS="$(docker exec "$CONTAINER" sqlite3 /etc/x-ui/x-ui.db \
+  "select count(*) from settings where key='${SETTINGS_KEY}';" | tr -d '[:space:]')"
+[[ "$ROWS" == "1" ]] || { echo "ERROR: expected 1 ${SETTINGS_KEY} row, found ${ROWS}" >&2; exit 1; }
 
 # 7. Restart and confirm xray came back.
 docker restart "$CONTAINER" >/dev/null

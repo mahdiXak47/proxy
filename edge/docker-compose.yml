@@ -3,7 +3,12 @@
 # host networking is required: the panel allocates inbound ports dynamically.
 services:
   x-ui:
-    image: alireza7/x-ui:1.10.2
+    # Built from edge/Dockerfile: upstream alireza7/x-ui:1.10.2 has NO sqlite3, which
+    # every config-apply and backup script in this repo depends on. Digest-pinned base.
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: proxy-xui:1.10.2
     container_name: x-ui
     restart: unless-stopped
     network_mode: host
