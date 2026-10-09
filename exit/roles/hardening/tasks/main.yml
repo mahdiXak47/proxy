@@ -1,0 +1,42 @@
+---
+- name: Deploy SSH hardening drop-in
+  ansible.builtin.template:
+    src: 10-hardening.conf.j2
+    dest: /etc/ssh/sshd_config.d/10-hardening.conf
+    mode: "0644"
+    validate: "sshd -t -f %s"
+  notify: Reload sshd
+
+- name: Deploy nftables ruleset
+  ansible.builtin.template:
+    src: nftables.conf.j2
+    dest: /etc/nftables.conf
+    mode: "0750"
+    validate: "nft -c -f %s"
+  notify: Reload nftables
+
+- name: Enable nftables at boot
+  ansible.builtin.systemd:
+    name: nftables
+    enabled: true
+    state: started
+
+- name: Configure fail2ban for sshd
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.d/sshd.local
+    mode: "0644"
+    content: |
+      [sshd]
+      enabled = true
+      backend = systemd
+      port = {{ ssh_port }}
+      maxretry = 3
+      findtime = 10m
+      bantime = 1h
+  notify: Restart fail2ban
+
+- name: Enable fail2ban
+  ansible.builtin.systemd:
+    name: fail2ban
+    enabled: true
+    state: started

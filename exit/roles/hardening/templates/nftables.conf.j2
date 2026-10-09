@@ -1,0 +1,48 @@
+#!/usr/sbin/nft -f
+# Managed by Ansible (roles/hardening).
+# Default-drop inbound. SSH only from admin CIDRs; REALITY only from the edge host.
+flush ruleset
+
+table inet filter {
+  set admin_v4 {
+    type ipv4_addr
+    flags interval
+    elements = { {{ admin_ssh_cidrs | join(', ') }} }
+  }
+
+  set edge_v4 {
+    type ipv4_addr
+    flags interval
+    elements = { {{ edge_client_cidrs | join(', ') }} }
+  }
+
+  chain input {
+    type filter hook input priority 0; policy drop;
+
+    iif lo accept
+    ct state established,related accept
+    ct state invalid drop
+
+    ip protocol icmp icmp type { echo-request, destination-unreachable, time-exceeded } \
+      limit rate 5/second accept
+    ip6 nexthdr ipv6-icmp limit rate 5/second accept
+
+    # management
+    tcp dport {{ ssh_port }} ip saddr @admin_v4 ct state new accept
+
+    # the proxy hop: ONLY the edge host may even see a TLS handshake here
+    tcp dport { {{ reality_port }}, {{ reality_alt_port }} } ip saddr @edge_v4 ct state new accept
+
+    limit rate 10/minute log prefix "nft-drop-in " level info
+    counter comment "dropped-input"
+  }
+
+  chain forward {
+    type filter hook forward priority 0; policy drop;
+    counter comment "dropped-forward"
+  }
+
+  chain output {
+    type filter hook output priority 0; policy accept;
+  }
+}

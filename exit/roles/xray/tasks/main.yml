@@ -1,0 +1,134 @@
+---
+- name: Create xray system user
+  ansible.builtin.user:
+    name: "{{ xray_user }}"
+    system: true
+    shell: /usr/sbin/nologin
+    home: /nonexistent
+    create_home: false
+    state: present
+
+- name: Create directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.owner | default('root') }}"
+    mode: "{{ item.mode | default('0755') }}"
+  loop:
+    - { path: "{{ xray_conf_dir }}" }
+    - { path: "{{ xray_share_dir }}" }
+    - { path: "{{ xray_log_dir }}", owner: "{{ xray_user }}", mode: "0750" }
+    - { path: "{{ xray_download_dir }}" }
+
+- name: Check installed xray version
+  ansible.builtin.command: "{{ xray_bin }} version"
+  register: xray_installed
+  changed_when: false
+  failed_when: false
+
+- name: Install or upgrade Xray-core
+  when: xray_version not in (xray_installed.stdout | default(''))
+  block:
+    - name: Download release archive
+      ansible.builtin.get_url:
+        url: "https://github.com/XTLS/Xray-core/releases/download/v{{ xray_version }}/Xray-{{ xray_arch }}.zip"
+        dest: "{{ xray_download_dir }}/Xray-{{ xray_arch }}-{{ xray_version }}.zip"
+        mode: "0640"
+        checksum: "{{ ('sha256:' ~ xray_sha256) if xray_sha256 | length > 0 else omit }}"
+        timeout: 60
+
+    - name: Download the release digest
+      ansible.builtin.get_url:
+        url: "https://github.com/XTLS/Xray-core/releases/download/v{{ xray_version }}/Xray-{{ xray_arch }}.zip.dgst"
+        dest: "{{ xray_download_dir }}/Xray-{{ xray_arch }}-{{ xray_version }}.zip.dgst"
+        mode: "0640"
+        timeout: 60
+      when: xray_sha256 | length == 0
+
+    - name: Compute the archive checksum
+      ansible.builtin.stat:
+        path: "{{ xray_download_dir }}/Xray-{{ xray_arch }}-{{ xray_version }}.zip"
+        checksum_algorithm: sha256
+      register: zip_stat
+      when: xray_sha256 | length == 0
+
+    - name: Read the published digest
+      ansible.builtin.slurp:
+        src: "{{ xray_download_dir }}/Xray-{{ xray_arch }}-{{ xray_version }}.zip.dgst"
+      register: dgst_raw
+      when: xray_sha256 | length == 0
+
+    - name: Verify the download against the published SHA256
+      ansible.builtin.assert:
+        that: zip_stat.stat.checksum in (dgst_raw.content | b64decode)
+        fail_msg: >-
+          Checksum mismatch. Computed {{ zip_stat.stat.checksum }}, not present in the
+          published .dgst file. Refusing to install.
+        quiet: true
+      when: xray_sha256 | length == 0
+
+    - name: Unpack the archive
+      ansible.builtin.unarchive:
+        src: "{{ xray_download_dir }}/Xray-{{ xray_arch }}-{{ xray_version }}.zip"
+        dest: "{{ xray_download_dir }}"
+        remote_src: true
+        list_files: true
+      register: unpacked
+
+    - name: Install the xray binary
+      ansible.builtin.copy:
+        src: "{{ xray_download_dir }}/xray"
+        dest: "{{ xray_bin }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0755"
+      notify: Restart xray
+
+    - name: Install geo data files
+      ansible.builtin.copy:
+        src: "{{ xray_download_dir }}/{{ item }}"
+        dest: "{{ xray_share_dir }}/{{ item }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - geoip.dat
+        - geosite.dat
+      notify: Restart xray
+
+  always:
+    - name: Clean up the download directory
+      ansible.builtin.file:
+        path: "{{ xray_download_dir }}"
+        state: absent
+
+- name: Deploy xray configuration
+  ansible.builtin.template:
+    src: config.json.j2
+    dest: "{{ xray_conf_dir }}/config.json"
+    owner: root
+    group: "{{ xray_user }}"
+    mode: "0640"
+    validate: "{{ xray_bin }} -test -config %s"
+  notify: Restart xray
+
+- name: Deploy systemd unit
+  ansible.builtin.template:
+    src: xray.service.j2
+    dest: /etc/systemd/system/xray.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart xray
+
+- name: Enable and start xray
+  ansible.builtin.systemd:
+    name: xray
+    enabled: true
+    state: started
+    daemon_reload: true

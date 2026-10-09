@@ -1,0 +1,10 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+# The template's `validate` already proved the config parses, so a restart here is safe.
+- name: Restart xray
+  ansible.builtin.systemd:
+    name: xray
+    state: restarted

@@ -1,0 +1,16 @@
+# Managed by Ansible (roles/hardening).
+Port {{ ssh_port }}
+PermitRootLogin prohibit-password
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+ChallengeResponseAuthentication no
+PubkeyAuthentication yes
+PermitEmptyPasswords no
+X11Forwarding no
+AllowAgentForwarding no
+AllowTcpForwarding no
+MaxAuthTries 3
+MaxSessions 4
+LoginGraceTime 30
+ClientAliveInterval 60
+ClientAliveCountMax 3

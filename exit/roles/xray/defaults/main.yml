@@ -1,0 +1,12 @@
+---
+# Overridable in group_vars; kept here so the role is self-contained.
+xray_version: "26.3.27"
+xray_arch: "linux-64"
+xray_bin: /usr/local/bin/xray
+xray_conf_dir: /usr/local/etc/xray
+xray_share_dir: /usr/local/share/xray
+xray_log_dir: /var/log/xray
+xray_user: xray
+xray_sniffing: true
+xray_sha256: ""
+xray_download_dir: /tmp/xray-install

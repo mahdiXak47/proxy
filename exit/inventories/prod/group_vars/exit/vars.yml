@@ -1,0 +1,42 @@
+---
+# Exit-node-specific settings ONLY.
+# Anything the edge also needs lives in shared/endpoints.yml - never duplicate it here.
+
+timezone: Europe/Istanbul
+
+# --- SSH / firewall allowlists ---
+# YOUR management IPs. Keep this tight; an empty or wrong value locks you out.
+admin_ssh_cidrs:
+  - "REPLACE_ME_ADMIN_CIDR/32"
+
+# Hosts allowed to dial the REALITY inbounds. edge_ip comes from shared/endpoints.yml.
+edge_client_cidrs:
+  - "{{ edge_ip }}/32"
+
+ssh_port: 22
+
+# --- Xray ---
+xray_version: "26.3.27"
+xray_arch: "linux-64"
+xray_bin: /usr/local/bin/xray
+xray_conf_dir: /usr/local/etc/xray
+xray_share_dir: /usr/local/share/xray
+xray_log_dir: /var/log/xray
+xray_user: xray
+xray_sniffing: true
+
+# Set to a sha256 to pin the release archive; empty means "verify via the .dgst file at run time".
+xray_sha256: ""
+
+# --- packages ---
+base_packages:
+  - ca-certificates
+  - curl
+  - unzip
+  - jq
+  - nftables
+  - fail2ban
+  - unattended-upgrades
+  - chrony
+  - dnsutils
+  - sqlite3

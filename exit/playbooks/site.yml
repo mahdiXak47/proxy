@@ -1,0 +1,41 @@
+---
+- name: Configure the Turkish exit node
+  hosts: exit
+  become: true
+  gather_facts: true
+
+  vars_files:
+    # Single source of truth shared with the edge. Order matters: endpoints then secrets.
+    - ../../shared/endpoints.yml
+    - ../../shared/vault.yml
+
+  pre_tasks:
+    - name: Fail fast on unreplaced placeholders
+      ansible.builtin.assert:
+        that:
+          - tr_ip is defined and 'REPLACE_ME' not in tr_ip
+          - edge_ip is defined and 'REPLACE_ME' not in edge_ip
+          - reality_short_ids | length > 0
+          - "'REPLACE_ME' not in reality_short_ids[0]"
+          - admin_ssh_cidrs | length > 0
+          - "'REPLACE_ME' not in admin_ssh_cidrs[0]"
+          - vault_reality_private_key is defined and vault_reality_private_key != 'REPLACE'
+          - vault_xray_client_uuid is defined and vault_xray_client_uuid != 'REPLACE'
+        fail_msg: >-
+          Placeholders remain. Fill shared/endpoints.yml, group_vars/exit/vars.yml
+          (admin_ssh_cidrs) and shared/vault.yml before applying.
+        quiet: true
+
+    - name: Warn loudly about lockout risk
+      ansible.builtin.debug:
+        msg: >-
+          About to restrict SSH to {{ admin_ssh_cidrs | join(', ') }} and REALITY ports to
+          {{ edge_client_cidrs | join(', ') }}. Keep a provider console session open.
+
+  roles:
+    - role: base
+      tags: [base]
+    - role: hardening
+      tags: [hardening]
+    - role: xray
+      tags: [xray]

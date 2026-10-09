@@ -1,0 +1,5 @@
+---
+# No external collections are required: every task uses ansible.builtin.*.
+# Kept so `ansible-galaxy install -r requirements.yml` stays a valid no-op step.
+collections: []
+roles: []

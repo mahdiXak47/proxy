@@ -1,0 +1,74 @@
+---
+- name: Set hostname
+  ansible.builtin.hostname:
+    name: "{{ inventory_hostname }}"
+
+- name: Read current timezone
+  ansible.builtin.command: timedatectl show -p Timezone --value
+  changed_when: false
+  register: current_tz
+
+- name: Set timezone
+  ansible.builtin.command: "timedatectl set-timezone {{ timezone }}"
+  when: current_tz.stdout | trim != timezone
+  changed_when: true
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name: "{{ base_packages }}"
+    state: present
+
+- name: Upgrade packages
+  ansible.builtin.apt:
+    upgrade: safe
+  register: apt_upgrade
+
+- name: Enable unattended security upgrades
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    mode: "0644"
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+
+- name: Apply network/performance sysctls
+  ansible.builtin.template:
+    src: 99-exit.conf.j2
+    dest: /etc/sysctl.d/99-exit.conf
+    mode: "0644"
+  notify: Reload sysctl
+
+- name: Ensure chrony is running
+  ansible.builtin.systemd:
+    name: chrony
+    state: started
+    enabled: true
+
+- name: Create xray log directory
+  ansible.builtin.file:
+    path: "{{ xray_log_dir }}"
+    state: directory
+    owner: "{{ xray_user }}"
+    group: "{{ xray_user }}"
+    mode: "0750"
+  # the user is created by the xray role; ignore ownership on the very first pass
+  failed_when: false
+
+- name: Install logrotate policy for xray
+  ansible.builtin.copy:
+    dest: /etc/logrotate.d/xray
+    mode: "0644"
+    content: |
+      {{ xray_log_dir }}/*.log {
+        weekly
+        rotate 4
+        compress
+        missingok
+        notifempty
+        copytruncate
+      }

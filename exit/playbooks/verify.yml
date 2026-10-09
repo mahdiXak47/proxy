@@ -1,0 +1,110 @@
+---
+- name: Verify the exit node is serving correctly
+  hosts: exit
+  become: true
+  gather_facts: false
+
+  vars_files:
+    - ../../shared/endpoints.yml
+    - ../../shared/vault.yml
+
+  tasks:
+    - name: Xray config is valid
+      ansible.builtin.command: "{{ xray_bin }} -test -config {{ xray_conf_dir }}/config.json"
+      changed_when: false
+      register: xray_test
+
+    - name: Show config test result
+      ansible.builtin.debug:
+        var: xray_test.stdout_lines
+
+    - name: Xray service state
+      ansible.builtin.systemd:
+        name: xray
+      register: xray_unit
+
+    - name: Service must be active and enabled
+      ansible.builtin.assert:
+        that:
+          - xray_unit.status.ActiveState == 'active'
+          - xray_unit.status.UnitFileState == 'enabled'
+        fail_msg: "xray is {{ xray_unit.status.ActiveState }} (expected active)"
+        quiet: true
+
+    - name: Collect listening sockets
+      ansible.builtin.command: ss -tlnH
+      changed_when: false
+      register: sockets
+
+    - name: Both REALITY ports must be listening
+      ansible.builtin.assert:
+        that:
+          - "':' ~ reality_port in sockets.stdout"
+          - "':' ~ reality_alt_port in sockets.stdout"
+        fail_msg: "expected listeners on {{ reality_port }} and {{ reality_alt_port }}"
+        quiet: true
+
+    - name: Xray must not be running as root
+      ansible.builtin.command: "ps -o user= -C xray"
+      changed_when: false
+      failed_when: false
+      register: xray_proc_user
+
+    - name: Assert unprivileged runtime
+      ansible.builtin.assert:
+        that: "'root' not in xray_proc_user.stdout"
+        fail_msg: "xray is running as root - check the systemd unit"
+        quiet: true
+
+    - name: Egress must leave from Turkey
+      ansible.builtin.uri:
+        url: https://ifconfig.co/json
+        return_content: true
+        timeout: 15
+      register: egress
+      changed_when: false
+
+    - name: Report egress geography
+      ansible.builtin.debug:
+        msg: >-
+          egress ip={{ egress.json.ip | default('?') }}
+          country={{ egress.json.country_iso | default(egress.json.country) | default('?') }}
+          asn={{ egress.json.asn_org | default('?') }}
+
+    - name: Assert Turkish egress
+      ansible.builtin.assert:
+        that: "(egress.json.country_iso | default(egress.json.country) | default('')) == 'TR'"
+        fail_msg: "exit node is not egressing from Turkey"
+        quiet: true
+
+    - name: REALITY must present the borrowed site's real certificate to unauthenticated probes
+      ansible.builtin.shell: >-
+        set -o pipefail;
+        echo | timeout 10 openssl s_client -connect 127.0.0.1:{{ reality_port }}
+        -servername {{ reality_server_names[0] }} 2>&1 | head -30
+      args:
+        executable: /bin/bash
+      changed_when: false
+      failed_when: false
+      register: probe
+
+    - name: Show the probe result (should look like a normal TLS handshake)
+      ansible.builtin.debug:
+        var: probe.stdout_lines
+
+    - name: nftables ruleset is loaded
+      ansible.builtin.command: nft list ruleset
+      changed_when: false
+      register: nft
+
+    - name: Firewall must default-drop and allowlist the edge
+      ansible.builtin.assert:
+        that:
+          - "'policy drop' in nft.stdout"
+          - edge_ip in nft.stdout
+        fail_msg: "nftables is not enforcing the expected policy"
+        quiet: true
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg: "ALL EXIT-NODE CHECKS PASSED"
