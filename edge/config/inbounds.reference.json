@@ -1,0 +1,55 @@
+{
+  "_comment": [
+    "Documentation only \u2014 x-ui owns inbounds in its SQLite DB, not this file.",
+    "This records the SHAPE of the client-facing inbound so it is reviewable in git.",
+    "Create it in the panel UI (Task 2.5 of the plan). UUIDs are stripped."
+  ],
+  "remark": "clients-vless-tls",
+  "listen": "",
+  "port": 443,
+  "protocol": "vless",
+  "settings": {
+    "clients": [
+      {
+        "id": "<generated-per-user>",
+        "flow": "xtls-rprx-vision",
+        "email": "user1",
+        "limitIp": 3,
+        "totalGB": 0,
+        "expiryTime": 0
+      }
+    ],
+    "decryption": "none",
+    "fallbacks": []
+  },
+  "streamSettings": {
+    "network": "tcp",
+    "security": "tls",
+    "tlsSettings": {
+      "serverName": "conn.yedamanebemabededige.ir",
+      "alpn": [
+        "h2",
+        "http/1.1"
+      ],
+      "certificates": [
+        {
+          "certificateFile": "/root/cert/fullchain.pem",
+          "keyFile": "/root/cert/privkey.pem"
+        }
+      ]
+    },
+    "tcpSettings": {
+      "header": {
+        "type": "none"
+      }
+    }
+  },
+  "sniffing": {
+    "enabled": true,
+    "destOverride": [
+      "http",
+      "tls",
+      "quic"
+    ]
+  }
+}
