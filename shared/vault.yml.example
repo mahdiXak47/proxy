@@ -1,0 +1,11 @@
+---
+# Shape of shared/vault.yml. The REAL file is ansible-vault encrypted and IS committed
+# (ciphertext is safe). Create it with `make secrets-init`, edit with `make secrets`.
+#
+#   vault_reality_private_key  consumed by exit/roles/xray  (exit only)
+#   vault_reality_public_key   consumed by edge/.env        (edge only)
+#   vault_xray_client_uuid     consumed by BOTH             (exit client <-> edge outbound user)
+
+vault_reality_private_key: "REPLACE"   # `xray x25519` -> PrivateKey
+vault_reality_public_key: "REPLACE"    # `xray x25519` -> Password / PublicKey
+vault_xray_client_uuid: "REPLACE"      # `xray uuid`

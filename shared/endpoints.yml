@@ -1,0 +1,39 @@
+---
+# Non-secret facts that BOTH sides must agree on. Single source of truth.
+# Secrets (x25519 keypair, client UUID) live in shared/vault.yml (ansible-vault).
+
+# ---- hosts ----
+# Public IPv4 of the Turkish exit VM.
+tr_ip: "REPLACE_ME_TR_IP"
+# Public IPv4 of the edge host running x-ui. Used for the exit's nftables allowlist.
+edge_ip: "REPLACE_ME_EDGE_IP"
+# SSH target for the edge host (used by `make edge-sync` / `edge-apply`).
+edge_ssh_user: "root"
+edge_repo_path: "/opt/proxy"
+
+# Domain already pointed at the edge host; the client-facing TLS inbound uses it.
+panel_domain: "conn.yedamanebemabededige.ir"
+
+# ---- REALITY hop: edge -> exit ----
+reality_port: 443
+reality_alt_port: 8443
+
+# The real third-party TLS site whose handshake REALITY borrows. Must be reachable
+# from the Turkish VM, must speak TLS 1.3 + HTTP/2, and should be a plausible
+# destination. serverName MUST match on both ends.
+reality_dest: "www.wikipedia.org:443"
+reality_server_names:
+  - "www.wikipedia.org"
+
+# shortIds: hex, even length, 2-16 chars. Generate with `openssl rand -hex 4`.
+reality_short_ids:
+  - "REPLACE_ME_SHORTID"
+reality_alt_short_ids:
+  - "REPLACE_ME_ALT_SHORTID"
+
+# uTLS fingerprint the edge presents when dialling the exit.
+reality_fingerprint: "chrome"
+
+# ---- local proxy endpoints on the edge (loopback only) ----
+edge_socks_port: 10808
+edge_http_port: 10809

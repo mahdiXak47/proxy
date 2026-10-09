@@ -1,0 +1,23 @@
+# ---- secrets & rendered state (never commit) ----
+edge/.env
+edge/certs/
+edge/data/
+edge/backups/
+*.db
+*.db.bak-*
+*.key
+*.pem
+shared/vault.yml.plain
+vault-pass*
+.vault-pass
+
+# ---- ansible ----
+*.retry
+exit/collections/
+exit/roles/galaxy/
+
+# ---- misc ----
+.venv/
+__pycache__/
+.DS_Store
+*.swp
