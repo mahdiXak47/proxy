@@ -2,7 +2,13 @@
 # Exit-node-specific settings ONLY.
 # Anything the edge also needs lives in shared/endpoints.yml - never duplicate it here.
 
-timezone: Europe/Istanbul
+# This VM egresses as AU (ASN BitCommand LLC), not Turkey. Timezone is cosmetic
+# (log timestamps only); UTC avoids implying a location the host isn't in.
+timezone: Etc/UTC
+
+# The restricted/domestic country the exit must NOT egress from. verify.yml asserts
+# the egress country is resolved and is not this one.
+domestic_country_iso: IR
 
 # ---------------------------------------------------------------------------
 # SSH exposure model

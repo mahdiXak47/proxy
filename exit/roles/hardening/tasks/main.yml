@@ -7,10 +7,10 @@
 
 - name: Parse the OpenSSH version
   ansible.builtin.set_fact:
-    # `sshd -V` writes to stderr on most builds; fall back to stdout.
-    sshd_version: >-
-      {{ ((sshd_version_raw.stderr | default('')) ~ ' ' ~ (sshd_version_raw.stdout | default('')))
-         | regex_search('OpenSSH_([0-9]+\\.[0-9]+)', '\\1') | first | default('0.0') }}
+    # `sshd -V` writes to stderr on most builds; fall back to stdout. Take the full
+    # `OpenSSH_X.Y` match and strip the prefix: the output-group form of regex_search
+    # raises on a non-match, and a YAML block scalar mangles the doubled backslash.
+    sshd_version: "{{ (((sshd_version_raw.stderr | default('')) ~ ' ' ~ (sshd_version_raw.stdout | default(''))) | regex_search('OpenSSH_[0-9]+\\.[0-9]+') | default('OpenSSH_0.0', true)) | regex_replace('^.*OpenSSH_', '') }}"
 
 - name: Report the SSH exposure decision
   ansible.builtin.debug:

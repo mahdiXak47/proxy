@@ -21,6 +21,19 @@
     - { path: "{{ xray_log_dir }}", owner: "{{ xray_user }}", mode: "0750" }
     - { path: "{{ xray_download_dir }}" }
 
+# `xray -test` (the config validate below) runs as root and will CREATE the error
+# log root-owned if it is missing, after which the non-root service cannot reopen
+# it. Pre-create it owned by xray so both the test and the service share one file.
+- name: Ensure the error log file exists and is owned by xray
+  ansible.builtin.file:
+    path: "{{ xray_log_dir }}/error.log"
+    state: touch
+    owner: "{{ xray_user }}"
+    group: "{{ xray_user }}"
+    mode: "0640"
+    modification_time: preserve
+    access_time: preserve
+
 - name: Check installed xray version
   ansible.builtin.command: "{{ xray_bin }} version"
   register: xray_installed

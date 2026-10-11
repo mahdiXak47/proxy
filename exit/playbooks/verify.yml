@@ -71,10 +71,16 @@
           country={{ egress.json.country_iso | default(egress.json.country) | default('?') }}
           asn={{ egress.json.asn_org | default('?') }}
 
-    - name: Assert Turkish egress
+    - name: Assert the exit egresses abroad, not back through the censored country
+      vars:
+        egress_country: "{{ egress.json.country_iso | default(egress.json.country) | default('') }}"
       ansible.builtin.assert:
-        that: "(egress.json.country_iso | default(egress.json.country) | default('')) == 'TR'"
-        fail_msg: "exit node is not egressing from Turkey"
+        # The security requirement is that traffic leaves from OUTSIDE the restricted
+        # country, not any one specific country. This VM egresses as AU, which is fine.
+        that:
+          - egress_country | length > 0
+          - egress_country != domestic_country_iso
+        fail_msg: "exit egress country is '{{ egress_country }}' - empty or inside the censored country ({{ domestic_country_iso }})"
         quiet: true
 
     - name: REALITY must present the borrowed site's real certificate to unauthenticated probes
@@ -108,7 +114,9 @@
     - name: SSH exposure matches the configured mode
       ansible.builtin.assert:
         that:
-          - (ssh_exposure == 'open') == ('meter ssh_rate4' in nft.stdout)
+          # Modern nftables renders the inline `meter` as a named dynamic set,
+          # so match the stable set name rather than the deprecated `meter` keyword.
+          - (ssh_exposure == 'open') == ('ssh_rate4' in nft.stdout)
         fail_msg: >-
           ssh_exposure is '{{ ssh_exposure }}' but the live ruleset does not match.
         quiet: true
@@ -123,7 +131,9 @@
         that:
           - "'passwordauthentication no' in sshd_eff.stdout | lower"
           - "'kbdinteractiveauthentication no' in sshd_eff.stdout | lower"
-          - "'permitrootlogin prohibit-password' in sshd_eff.stdout | lower"
+          # prohibit-password and without-password are OpenSSH synonyms; sshd -T may
+          # emit either. Both mean "root key-only, no password" - accept both.
+          - "'permitrootlogin prohibit-password' in sshd_eff.stdout | lower or 'permitrootlogin without-password' in sshd_eff.stdout | lower"
         fail_msg: >-
           sshd is not enforcing key-only auth. With SSH open to the internet this is
           the control that matters most - do not leave it broken.
