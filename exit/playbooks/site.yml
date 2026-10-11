@@ -17,8 +17,8 @@
           - edge_ip is defined and 'REPLACE_ME' not in edge_ip
           - reality_short_ids | length > 0
           - "'REPLACE_ME' not in reality_short_ids[0]"
-          - admin_ssh_cidrs | length > 0
-          - "'REPLACE_ME' not in admin_ssh_cidrs[0]"
+          - ssh_exposure in ['open', 'allowlist']
+          - ssh_exposure == 'open' or (admin_ssh_cidrs | length > 0)
           - vault_reality_private_key is defined and vault_reality_private_key != 'REPLACE'
           - vault_xray_client_uuid is defined and vault_xray_client_uuid != 'REPLACE'
         fail_msg: >-
@@ -26,11 +26,18 @@
           (admin_ssh_cidrs) and shared/vault.yml before applying.
         quiet: true
 
-    - name: Warn loudly about lockout risk
+    - name: Announce the SSH exposure model
       ansible.builtin.debug:
         msg: >-
-          About to restrict SSH to {{ admin_ssh_cidrs | join(', ') }} and REALITY ports to
-          {{ edge_client_cidrs | join(', ') }}. Keep a provider console session open.
+          {% if ssh_exposure == 'allowlist' %}
+          SSH will be restricted to {{ admin_ssh_cidrs | join(', ') }} - a wrong value here
+          LOCKS YOU OUT. Keep a provider console session open.
+          {% else %}
+          SSH stays reachable from any address (key-only auth, per-source rate limiting,
+          fail2ban + recidive). No lockout risk from the firewall in this mode.
+          {% endif %}
+          REALITY ports {{ reality_port }}/{{ reality_alt_port }} are restricted to
+          {{ edge_client_cidrs | join(', ') }} regardless of the SSH mode.
 
   roles:
     - role: base

@@ -152,13 +152,53 @@ for rel in ("edge/config/xray-template.json",
                         body))
 
 nft = (ROOT / "exit" / "roles" / "hardening" / "templates" / "nftables.conf.j2").read_text()
+sshd = (ROOT / "exit" / "roles" / "hardening" / "templates" / "10-hardening.conf.j2").read_text()
+evars = load_flat_yaml(
+    (ROOT / "exit" / "inventories" / "prod" / "group_vars" / "exit" / "vars.yml").read_text())
+
 print("\nfirewall ->")
 check("input chain default-drops", "policy drop" in nft)
 check("forward chain default-drops", nft.count("policy drop") >= 2)
 check("REALITY ports allowlisted to the edge set", "ip saddr @edge_v4" in nft)
-check("ssh allowlisted to the admin set", "ip saddr @admin_v4" in nft)
 check("both REALITY ports opened",
       "{{ reality_port }}" in nft and "{{ reality_alt_port }}" in nft)
+check("interval sets use auto-merge",
+      nft.count("auto-merge") >= 2,
+      "overlapping CIDRs otherwise fail with 'conflicting intervals specified'")
+
+print("\nssh exposure ->")
+mode = evars.get("ssh_exposure", "")
+check("ssh_exposure is set to a known mode", mode in ("open", "allowlist"), f"got '{mode}'")
+check("template implements both exposure modes",
+      "ssh_exposure == 'allowlist'" in nft and "meter ssh_rate4" in nft)
+check("REALITY ports stay edge-only regardless of ssh_exposure",
+      "ip saddr @edge_v4" in nft.split("--- the proxy hop")[1]
+      if "--- the proxy hop" in nft else False,
+      "the proxy hop must never follow the ssh exposure mode")
+
+if mode == "open":
+    check("open mode rate-limits NEW ssh per source IP",
+          "meter ssh_rate4" in nft and "ip saddr limit rate" in nft,
+          "a global limit would let a flood lock the real admin out")
+    check("open mode leaves established sessions untouched",
+          "ct state established,related accept" in nft
+          and nft.index("ct state established,related accept") < nft.index("meter ssh_rate4"),
+          "the established rule must precede the meter or sessions could be throttled")
+elif mode == "allowlist":
+    check("allowlist mode has at least one admin CIDR",
+          isinstance(evars.get("admin_ssh_cidrs"), list) and len(evars["admin_ssh_cidrs"]) > 0,
+          "an empty allowlist locks you out completely")
+
+print("\nssh daemon policy ->")
+check("passwords disabled", "PasswordAuthentication no" in sshd)
+check("keyboard-interactive disabled", "KbdInteractiveAuthentication no" in sshd)
+check("publickey is the only accepted method", "AuthenticationMethods publickey" in sshd)
+check("root may not use a password", "PermitRootLogin prohibit-password" in sshd)
+check("unauthenticated connection flood capped", "MaxStartups" in sshd)
+check("per-source penalties kept in a version-gated drop-in",
+      (ROOT / "exit" / "roles" / "hardening" / "templates" / "20-penalties.conf.j2").exists()
+      and "PerSourcePenalties" not in sshd,
+      "PerSourcePenalties breaks sshd < 9.8, so it must not live in the base drop-in")
 
 print(f"\n{checks - len(errors)}/{checks} checks passed")
 if errors:

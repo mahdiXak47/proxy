@@ -105,6 +105,46 @@
         fail_msg: "nftables is not enforcing the expected policy"
         quiet: true
 
+    - name: SSH exposure matches the configured mode
+      ansible.builtin.assert:
+        that:
+          - (ssh_exposure == 'open') == ('meter ssh_rate4' in nft.stdout)
+        fail_msg: >-
+          ssh_exposure is '{{ ssh_exposure }}' but the live ruleset does not match.
+        quiet: true
+
+    - name: Password authentication must be refused
+      ansible.builtin.command: "sshd -T"
+      changed_when: false
+      register: sshd_eff
+
+    - name: Assert key-only authentication
+      ansible.builtin.assert:
+        that:
+          - "'passwordauthentication no' in sshd_eff.stdout | lower"
+          - "'kbdinteractiveauthentication no' in sshd_eff.stdout | lower"
+          - "'permitrootlogin prohibit-password' in sshd_eff.stdout | lower"
+        fail_msg: >-
+          sshd is not enforcing key-only auth. With SSH open to the internet this is
+          the control that matters most - do not leave it broken.
+        quiet: true
+
+    - name: fail2ban jails must be active
+      ansible.builtin.command: fail2ban-client status
+      changed_when: false
+      failed_when: false
+      register: f2b
+
+    - name: Report active jails
+      ansible.builtin.debug:
+        var: f2b.stdout_lines
+
+    - name: Assert the sshd jail is running
+      ansible.builtin.assert:
+        that: "'sshd' in f2b.stdout"
+        fail_msg: "the fail2ban sshd jail is not active"
+        quiet: true
+
     - name: Summary
       ansible.builtin.debug:
         msg: "ALL EXIT-NODE CHECKS PASSED"
