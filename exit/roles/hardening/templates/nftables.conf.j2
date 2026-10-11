@@ -1,18 +1,33 @@
 #!/usr/sbin/nft -f
 # Managed by Ansible (roles/hardening).
-# Default-drop inbound. SSH only from admin CIDRs; REALITY only from the edge host.
+#
+# Default-drop inbound.
+#   - REALITY proxy ports: ALWAYS restricted to the edge host only. This is the
+#     strongest control in the whole design - no other host on the internet can
+#     even open a TCP connection, so active probing and scanning are impossible.
+#   - SSH: governed by `ssh_exposure`. In "open" mode it is reachable from any
+#     address but rate limited PER SOURCE IP, so a brute-force flood cannot
+#     consume a global budget and lock the real admin out.
 flush ruleset
 
 table inet filter {
+{% if ssh_exposure == 'allowlist' %}
   set admin_v4 {
     type ipv4_addr
+    # auto-merge collapses overlapping/adjacent CIDRs (e.g. a /32 inside a /24).
+    # Without it nftables rejects the ruleset: "conflicting intervals specified".
     flags interval
+    auto-merge
+{% if admin_ssh_cidrs | length > 0 %}
     elements = { {{ admin_ssh_cidrs | join(', ') }} }
+{% endif %}
   }
+{% endif %}
 
   set edge_v4 {
     type ipv4_addr
     flags interval
+    auto-merge
     elements = { {{ edge_client_cidrs | join(', ') }} }
   }
 
@@ -27,10 +42,21 @@ table inet filter {
       limit rate 5/second accept
     ip6 nexthdr ipv6-icmp limit rate 5/second accept
 
-    # management
+    # --- management SSH ---
+{% if ssh_exposure == 'allowlist' %}
     tcp dport {{ ssh_port }} ip saddr @admin_v4 ct state new accept
+{% else %}
+    # Open to the world, but each source IP gets its own budget. Established
+    # sessions bypass this entirely (matched by the ct state rule above).
+    tcp dport {{ ssh_port }} ct state new \
+      meter ssh_rate4 { ip saddr limit rate {{ ssh_rate_limit }} burst {{ ssh_rate_burst }} packets } \
+      accept
+    tcp dport {{ ssh_port }} ct state new \
+      meter ssh_rate6 { ip6 saddr limit rate {{ ssh_rate_limit }} burst {{ ssh_rate_burst }} packets } \
+      accept
+{% endif %}
 
-    # the proxy hop: ONLY the edge host may even see a TLS handshake here
+    # --- the proxy hop: ONLY the edge host may even see a TLS handshake here ---
     tcp dport { {{ reality_port }}, {{ reality_alt_port }} } ip saddr @edge_v4 ct state new accept
 
     limit rate 10/minute log prefix "nft-drop-in " level info

@@ -4,18 +4,49 @@
 
 timezone: Europe/Istanbul
 
-# --- SSH / firewall allowlists ---
-# YOUR management IPs. Keep this tight; an empty or wrong value locks you out.
-admin_ssh_cidrs:
-  - "REPLACE_ME_ADMIN_CIDR/32"
+# ---------------------------------------------------------------------------
+# SSH exposure model
+# ---------------------------------------------------------------------------
+# "open"      - SSH reachable from any IP. Key-only auth, fail2ban, per-source
+#               rate limiting and OpenSSH penalties carry the security weight.
+#               Correct choice for a roaming admin (laptop on wifi/cellular,
+#               CGNAT addresses that change constantly and are shared with
+#               thousands of other subscribers, so allowlisting them is both
+#               unstable AND nearly meaningless).
+# "allowlist" - only admin_ssh_cidrs may reach SSH. Tighter, but locks you out
+#               the moment your address changes. Use only with a static IP or
+#               a jump host.
+ssh_exposure: open
 
-# Hosts allowed to dial the REALITY inbounds. edge_ip comes from shared/endpoints.yml.
-edge_client_cidrs:
-  - "{{ edge_ip }}/32"
+# Used ONLY when ssh_exposure == "allowlist". CIDR notation: a /32 is one single
+# address (203.0.113.7/32), a /24 is 256 addresses (203.0.113.0/24).
+admin_ssh_cidrs: []
 
 ssh_port: 22
 
-# --- Xray ---
+# Per-source-IP rate limit on NEW ssh connections (nftables meter). Established
+# sessions are never affected, so this cannot interrupt you mid-session, and the
+# limit is per source address - a scanner flood cannot consume your budget.
+ssh_rate_limit: "10/minute"
+ssh_rate_burst: 5
+
+# fail2ban
+fail2ban_maxretry: 3
+fail2ban_findtime: 10m
+fail2ban_bantime: 1h
+# "recidive" re-bans hosts that keep coming back after a ban expires.
+fail2ban_recidive_enabled: true
+fail2ban_recidive_bantime: 1w
+fail2ban_recidive_findtime: 1d
+
+# ---------------------------------------------------------------------------
+# Xray
+# ---------------------------------------------------------------------------
+# The REALITY proxy ports are ALWAYS allowlisted to the edge host only,
+# regardless of ssh_exposure. edge_ip comes from shared/endpoints.yml.
+edge_client_cidrs:
+  - "{{ edge_ip }}/32"
+
 xray_version: "26.3.27"
 xray_arch: "linux-64"
 xray_bin: /usr/local/bin/xray
@@ -28,7 +59,9 @@ xray_sniffing: true
 # Set to a sha256 to pin the release archive; empty means "verify via the .dgst file at run time".
 xray_sha256: ""
 
-# --- packages ---
+# ---------------------------------------------------------------------------
+# packages
+# ---------------------------------------------------------------------------
 base_packages:
   - ca-certificates
   - curl
@@ -36,6 +69,7 @@ base_packages:
   - jq
   - nftables
   - fail2ban
+  - python3-systemd      # fail2ban's systemd journal backend needs this on Debian
   - unattended-upgrades
   - chrony
   - dnsutils

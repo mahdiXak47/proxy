@@ -1,0 +1,12 @@
+# Managed by Ansible (roles/hardening).
+# Catches hosts that return after a ban expires and bans them for much longer.
+# Matters when SSH is open to the internet: a single ban teaches a persistent
+# scanner nothing, a week-long ban removes it from the logs entirely.
+[recidive]
+enabled   = true
+backend   = systemd
+logpath   = /var/log/fail2ban.log
+bantime   = {{ fail2ban_recidive_bantime }}
+findtime  = {{ fail2ban_recidive_findtime }}
+maxretry  = 3
+banaction = nftables-allports

@@ -1,10 +1,57 @@
 ---
+- name: Detect the installed OpenSSH version
+  ansible.builtin.command: sshd -V
+  changed_when: false
+  failed_when: false
+  register: sshd_version_raw
+
+- name: Parse the OpenSSH version
+  ansible.builtin.set_fact:
+    # `sshd -V` writes to stderr on most builds; fall back to stdout.
+    sshd_version: >-
+      {{ ((sshd_version_raw.stderr | default('')) ~ ' ' ~ (sshd_version_raw.stdout | default('')))
+         | regex_search('OpenSSH_([0-9]+\\.[0-9]+)', '\\1') | first | default('0.0') }}
+
+- name: Report the SSH exposure decision
+  ansible.builtin.debug:
+    msg: >-
+      ssh_exposure={{ ssh_exposure }}
+      openssh={{ sshd_version }}
+      {{ 'per-source penalties supported' if sshd_version is version('9.8', '>=')
+         else 'per-source penalties NOT supported on this sshd' }}
+
+- name: Validate the exposure mode
+  ansible.builtin.assert:
+    that:
+      - ssh_exposure in ['open', 'allowlist']
+      - ssh_exposure == 'open' or (admin_ssh_cidrs | length > 0)
+    fail_msg: >-
+      ssh_exposure must be 'open' or 'allowlist', and 'allowlist' requires a
+      non-empty admin_ssh_cidrs.
+    quiet: true
+
 - name: Deploy SSH hardening drop-in
   ansible.builtin.template:
     src: 10-hardening.conf.j2
     dest: /etc/ssh/sshd_config.d/10-hardening.conf
     mode: "0644"
     validate: "sshd -t -f %s"
+  notify: Reload sshd
+
+- name: Deploy OpenSSH per-source penalties (9.8+)
+  ansible.builtin.template:
+    src: 20-penalties.conf.j2
+    dest: /etc/ssh/sshd_config.d/20-penalties.conf
+    mode: "0644"
+    validate: "sshd -t -f %s"
+  when: sshd_version is version('9.8', '>=')
+  notify: Reload sshd
+
+- name: Remove the penalties drop-in on older sshd
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d/20-penalties.conf
+    state: absent
+  when: sshd_version is version('9.8', '<')
   notify: Reload sshd
 
 - name: Deploy nftables ruleset
@@ -21,18 +68,19 @@
     enabled: true
     state: started
 
-- name: Configure fail2ban for sshd
-  ansible.builtin.copy:
+- name: Configure the sshd jail
+  ansible.builtin.template:
+    src: jail-sshd.local.j2
     dest: /etc/fail2ban/jail.d/sshd.local
     mode: "0644"
-    content: |
-      [sshd]
-      enabled = true
-      backend = systemd
-      port = {{ ssh_port }}
-      maxretry = 3
-      findtime = 10m
-      bantime = 1h
+  notify: Restart fail2ban
+
+- name: Configure the recidive jail (re-bans repeat offenders)
+  ansible.builtin.template:
+    src: jail-recidive.local.j2
+    dest: /etc/fail2ban/jail.d/recidive.local
+    mode: "0644"
+  when: fail2ban_recidive_enabled | bool
   notify: Restart fail2ban
 
 - name: Enable fail2ban

@@ -1,0 +1,10 @@
+# Managed by Ansible (roles/hardening).
+# OpenSSH >= 9.8 only. Applied conditionally because older sshd fails to parse it.
+#
+# The built-in penalty box: sshd tracks per-source-address behaviour and refuses
+# connections from addresses that keep failing. This is the kernel-independent
+# complement to the nftables meter and fail2ban - it reacts to authentication
+# outcomes, which a packet filter cannot see.
+PerSourcePenalties yes
+PerSourceMaxStartups 2
+PerSourceNetBlockSize 32:128

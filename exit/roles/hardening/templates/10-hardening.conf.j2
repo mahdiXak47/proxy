@@ -1,16 +1,31 @@
 # Managed by Ansible (roles/hardening).
+# SSH exposure mode: {{ ssh_exposure }}
 Port {{ ssh_port }}
-PermitRootLogin prohibit-password
+
+# Keys only. With SSH open to the internet these three lines are what actually
+# protects the host - a password simply cannot be offered, so password brute
+# forcing is not merely slow, it is impossible.
+PubkeyAuthentication yes
 PasswordAuthentication no
 KbdInteractiveAuthentication no
-ChallengeResponseAuthentication no
-PubkeyAuthentication yes
 PermitEmptyPasswords no
+PermitRootLogin prohibit-password
+
+AuthenticationMethods publickey
+MaxAuthTries 3
+MaxSessions 4
+LoginGraceTime 20
+
+# Cap unauthenticated connections: start randomly dropping at 10 concurrent,
+# hard refuse at 60. Blunts connection-flood noise.
+MaxStartups 10:30:60
+
 X11Forwarding no
 AllowAgentForwarding no
 AllowTcpForwarding no
-MaxAuthTries 3
-MaxSessions 4
-LoginGraceTime 30
+PermitTunnel no
+AllowStreamLocalForwarding no
+
 ClientAliveInterval 60
 ClientAliveCountMax 3
+UseDNS no

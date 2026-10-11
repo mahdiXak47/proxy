@@ -4,9 +4,9 @@
 
 # ---- hosts ----
 # Public IPv4 of the Turkish exit VM.
-tr_ip: "REPLACE_ME_TR_IP"
+tr_ip: "82.115.18.175"
 # Public IPv4 of the edge host running x-ui. Used for the exit's nftables allowlist.
-edge_ip: "REPLACE_ME_EDGE_IP"
+edge_ip: "185.53.140.24"
 # SSH target for the edge host (used by `make edge-sync` / `edge-apply`).
 edge_ssh_user: "root"
 edge_repo_path: "/opt/proxy"
@@ -27,9 +27,9 @@ reality_server_names:
 
 # shortIds: hex, even length, 2-16 chars. Generate with `openssl rand -hex 4`.
 reality_short_ids:
-  - "REPLACE_ME_SHORTID"
+  - "e0106af9"
 reality_alt_short_ids:
-  - "REPLACE_ME_ALT_SHORTID"
+  - "47bf75ed"
 
 # uTLS fingerprint the edge presents when dialling the exit.
 reality_fingerprint: "chrome"

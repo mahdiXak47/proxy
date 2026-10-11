@@ -1,0 +1,10 @@
+# Managed by Ansible (roles/hardening).
+[sshd]
+enabled  = true
+backend  = systemd
+port     = {{ ssh_port }}
+maxretry = {{ fail2ban_maxretry }}
+findtime = {{ fail2ban_findtime }}
+bantime  = {{ fail2ban_bantime }}
+# nftables is the active firewall; do not let fail2ban reach for iptables.
+banaction = nftables-multiport
