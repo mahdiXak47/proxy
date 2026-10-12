@@ -14,7 +14,6 @@
         "clients": [
           {
             "id": "{{ vault_xray_client_uuid }}",
-            "flow": "xtls-rprx-vision",
             "email": "edge-primary"
           }
         ],
@@ -22,14 +21,16 @@
       },
       "streamSettings": {
         "network": "tcp",
-        "security": "reality",
-        "realitySettings": {
-          "show": false,
-          "dest": "{{ reality_dest }}",
-          "xver": 0,
-          "serverNames": {{ reality_server_names | to_json }},
-          "privateKey": "{{ vault_reality_private_key }}",
-          "shortIds": {{ reality_short_ids | to_json }}
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "{{ tr_ip }}",
+          "minVersion": "1.2",
+          "certificates": [
+            {
+              "certificateFile": "{{ xray_conf_dir }}/self.crt",
+              "keyFile": "{{ xray_conf_dir }}/self.key"
+            }
+          ]
         }
       },
       "sniffing": {
@@ -47,7 +48,6 @@
         "clients": [
           {
             "id": "{{ vault_xray_client_uuid }}",
-            "flow": "xtls-rprx-vision",
             "email": "edge-failover"
           }
         ],
@@ -55,14 +55,16 @@
       },
       "streamSettings": {
         "network": "tcp",
-        "security": "reality",
-        "realitySettings": {
-          "show": false,
-          "dest": "{{ reality_dest }}",
-          "xver": 0,
-          "serverNames": {{ reality_server_names | to_json }},
-          "privateKey": "{{ vault_reality_private_key }}",
-          "shortIds": {{ reality_alt_short_ids | to_json }}
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "{{ tr_ip }}",
+          "minVersion": "1.2",
+          "certificates": [
+            {
+              "certificateFile": "{{ xray_conf_dir }}/self.crt",
+              "keyFile": "{{ xray_conf_dir }}/self.key"
+            }
+          ]
         }
       },
       "sniffing": {

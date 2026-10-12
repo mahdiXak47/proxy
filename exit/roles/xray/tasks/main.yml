@@ -118,6 +118,38 @@
         path: "{{ xray_download_dir }}"
         state: absent
 
+# The edge dials the exit with serverName set to the exit's IP (no domain SNI):
+# domain SNIs to this IP are reset in transit on the edge's egress path, so REALITY
+# (which requires a borrowed domain SNI) cannot be used. A self-signed cert pinned
+# by the edge gives TLS without a domain. Generated once so the pin stays stable.
+- name: Generate the self-signed TLS cert for the REALITY-less TLS inbound
+  ansible.builtin.command:
+    cmd: >-
+      openssl req -x509 -newkey rsa:2048 -nodes -days 3650
+      -keyout {{ xray_conf_dir }}/self.key -out {{ xray_conf_dir }}/self.crt
+      -subj "/CN={{ tr_ip }}"
+    creates: "{{ xray_conf_dir }}/self.crt"
+
+- name: Secure the TLS keypair for xray
+  ansible.builtin.file:
+    path: "{{ item }}"
+    owner: root
+    group: "{{ xray_user }}"
+    mode: "0640"
+  loop:
+    - "{{ xray_conf_dir }}/self.crt"
+    - "{{ xray_conf_dir }}/self.key"
+
+- name: Compute the cert pin (sha256) for the edge outbound
+  ansible.builtin.shell:
+    cmd: "openssl x509 -in {{ xray_conf_dir }}/self.crt -outform DER | openssl dgst -sha256 | sed 's/^.*= //'"
+  changed_when: false
+  register: cert_pin
+
+- name: Show the cert pin to paste into the edge outbound (pinnedPeerCertSha256)
+  ansible.builtin.debug:
+    msg: "edge outbound pinnedPeerCertSha256 = {{ cert_pin.stdout }}"
+
 - name: Deploy xray configuration
   ansible.builtin.template:
     src: config.json.j2

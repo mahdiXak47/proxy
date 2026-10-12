@@ -70,6 +70,7 @@ xray_sha256: ""
 # ---------------------------------------------------------------------------
 base_packages:
   - ca-certificates
+  - openssl
   - curl
   - unzip
   - jq
